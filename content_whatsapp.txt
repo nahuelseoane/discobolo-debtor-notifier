@@ -1,0 +1,2 @@
+Hola {first_name} 💚 te recordamos que tenés un saldo pendiente de ${amount}.
+Cualquier duda, hablá con Claudio o Nahuel en recepción. ¡Gracias! 🎾 Discóbolo
