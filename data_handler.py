@@ -24,7 +24,7 @@ def get_debtor_data(sheet_name="Octubre"):
     )
     merged_df["First Name"] =  merged_df["First Name"].str.split(", ").str[1].str.split().str[0].str.lower().str.capitalize()
     merged_df = merged_df.drop(columns=["Nombre Completo", "DNI", "Jefe de Grupo I", "Tipo de Pago"])
-    print(merged_df.head())
+    # print(merged_df.head())
 
     # 💵 Filter only real debtors
     merged_df = merged_df[merged_df["SALDO"] > 10000]

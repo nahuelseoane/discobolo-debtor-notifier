@@ -15,3 +15,6 @@ DEBTOR_FILE = os.path.join(BASE_PATH, "Morosos","Morosos 2025.xlsx")
 DB_BASE = os.path.join(BASE_PATH, "Transferencias-bancarias", "2025")
 DB_FILE = os.path.join(DB_BASE, "socios_database.xlsx")
 DB_FILE_2 = os.path.join(DB_BASE, "db.xlsx")
+
+USERNAME_WINDOWS = os.getenv("USERNAME_WINDOWS")
+USERNAME_LINUX = os.getenv("USERNAME_LINUX")
