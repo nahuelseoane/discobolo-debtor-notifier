@@ -16,6 +16,11 @@ Built with **Python**, this tool extracts, cleans, and formats monthly debtor da
 
 ---
 
+## 📷 Screenshot
+![Screenshot of the script running](https://i.imgur.com/BtujamF.png)
+
+---
+
 ## 🧠 Project Architecture
 
 ```
