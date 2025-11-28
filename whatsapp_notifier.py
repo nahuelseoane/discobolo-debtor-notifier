@@ -25,6 +25,7 @@ def get_driver():
     driver = webdriver.Chrome(options=options)
     return driver
 
+
 def get_driver_chrome_windows():
     from selenium.webdriver.chrome.options import Options
     import os
@@ -55,47 +56,119 @@ def clear_and_focus_search_box(driver):
     return search_box
 
 
-def verify_chat_opened(driver, name, phone):
-    """Verifies the opened chat matches the target contact (by name or phone)."""
-    try:
-        for _ in range(3):  # Try a few times to allow header to update
-            chat_title = WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((By.XPATH, '//header//span[@dir="auto" or @class][1]'))
-            ).text.strip()
+def normalize_phone(p):
+    if not p:
+        return ""
+    return "".join(ch for ch in str(p) if ch.isdigit())
 
-            # Skip invalid titles like numbers or single characters
-            if chat_title and len(chat_title) > 2 and not chat_title.isdigit():
-                break
-            time.sleep(1)
 
-        if not chat_title or len(chat_title) <= 2:
-            print("⚠️ Could not read a valid chat title.")
-            return False
+def verify_chat_opened(driver, expected_name, phone, searched_by_phone=False):
+    """
+    Unified chat verification:
+    - Retrieves the real chat title using debug_chat_title()
+    - Compares it with the expected name
+    - If searching by phone, name mismatch does NOT matter
+    """
+    chat_title = debug_chat_title(driver)
 
-        # Normalize both strings
-        normalized_title = chat_title.lower()
-        normalized_name = str(name).strip().lower()
-        normalized_phone = str(phone).strip().lower()
+    # If searching by phone, only phone matching matters
+    if searched_by_phone:
+        # Always accept phone-based chat opening for verification 
+        # (message sending can still be restricted)
+        return True
 
-        # Basic matching logic
-        if normalized_name in normalized_title or normalized_phone in normalized_title:
-            print(f"✅ Chat verified: {chat_title}")
+    # Normalize
+    expected = expected_name.lower().strip()
+    title = chat_title.lower().strip()
+
+    # Partial name match
+    if expected in title:
+        print(f"✅ Chat verified by exact name: {chat_title}")
+        return True
+
+    # Word-by-word partial match
+    for part in expected.split():
+        if len(part) > 2 and part in title:
+            print(f"✅ Chat verified by partial name: {chat_title}")
             return True
 
-        # Handle partial matches (e.g. if title is just "Tomas" and contact is "Tomas Lynch")
-        name_parts = normalized_name.split()
-        for part in name_parts:
-            if len(part) > 2 and part in normalized_title:
-                print(f"✅ Chat partially verified: {chat_title}")
-                return True
+    print(f"🚫 Chat mismatch — Expected {expected_name} but got: '{chat_title}'")
+    return False
 
-        print(f"🚫 Chat opened is not {name} or {phone} — looks like a group or wrong chat. Skipping.")
-        return False
 
-    except Exception:
-        print(f"⚠️ Couldn't verify chat for {name}. Skipping to avoid wrong chat.")
-        return False
-    
+def debug_chat_title(driver):
+    """
+    Captures the real WhatsApp chat title.
+    Works with the new obfuscated class WhatsApp UI.
+    """
+
+    for attempt in range(12):  # ~12 seconds of retries
+        
+        try:
+            # ALL spans inside header with dir="auto"
+            spans = driver.find_elements(
+                By.XPATH,
+                "//header//span[@dir='auto']"
+            )
+
+            for sp in spans:
+                title = sp.text.strip()
+
+                # skip empty
+                if not title:
+                    continue
+
+                # skip placeholder numbers (badge unread counter)
+                if title.isdigit():
+                    continue
+
+                # skip too-short placeholders ("1", "15")
+                if len(title) <= 2:
+                    continue
+
+                # THIS is the real name
+                return title
+
+        except:
+            pass
+
+        # wait and try again
+        time.sleep(1)
+
+    return "<no real title loaded>"
+
+def try_open_chat_by_phone(driver, phone):
+    """
+    Returns:
+        new_title: str
+        changed: bool  → True if WhatsApp opened a NEW chat
+    """
+
+    # 1. Read OLD chat title BEFORE doing anything else
+    old_title = debug_chat_title(driver)
+
+    # 2. Move to search bar
+    search_box = clear_and_focus_search_box(driver)
+
+    # Small pause to avoid race condition
+    time.sleep(0.3)
+
+    # 3. Search by phone
+    search_box.send_keys(phone)
+    time.sleep(0.5)
+    search_box.send_keys(Keys.ENTER)
+
+    # 4. Wait for UI to finish switching
+    time.sleep(1.5)
+
+    # 5. Read NEW chat title
+    new_title = debug_chat_title(driver)
+
+    # 6. Determine if chat changed
+    changed = (new_title != old_title)
+
+    return new_title, changed
+
 
 def send_message(driver, name, phone, message):
     try:
@@ -116,8 +189,8 @@ def send_message(driver, name, phone, message):
             first_result.click()
             time.sleep(1.5)
 
-            # if not verify_chat_opened(driver, name, phone):
-            #     return
+            if not verify_chat_opened(driver, name, phone, searched_by_phone=False):
+                return False
             print(f"💬 Chat found by name: {name}")
 
         except Exception:
@@ -126,7 +199,7 @@ def send_message(driver, name, phone, message):
             # 2nd option - by phone
             if not phone or phone == "nan":
                 print(f" Skipping {name} - no valid phone number.")
-                return
+                return False
             search_box = clear_and_focus_search_box(driver)
 
             # Now type the phone number
@@ -134,10 +207,19 @@ def send_message(driver, name, phone, message):
             time.sleep(2)
             search_box.send_keys(Keys.ENTER)
             time.sleep(2)
-            if not verify_chat_opened(driver, name, phone):
-                return
-            print(f"💬 Chat found by phone number: {phone}")
+            # Fallback verification only for debugging, no sending
+            chat_title, opened_new = try_open_chat_by_phone(driver, phone)
 
+            # If WhatsApp did NOT open a new chat → number is invalid or not found
+            if not opened_new:
+                print(f"❌ No chat found for number '{phone}'. WhatsApp stayed on the previous chat.")
+                print(f"   Previous chat title was: '{chat_title}'")
+                return False   # <-- IMPORTANT
+
+            # If WhatsApp DID open a chat → show the real title (debug only)
+            print(f"⚠️ Fallback search by phone opened a chat titled: '{chat_title}'")
+            print("   (Not sending message as a safety measure)")
+            return False    
 
         msg_box = WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'))
@@ -147,8 +229,11 @@ def send_message(driver, name, phone, message):
         msg_box.send_keys(Keys.CONTROL, 'v')
         msg_box.send_keys(Keys.ENTER)
         print(f"✅ WhatsApp sent to {name} ({phone})")
+        return True
+    
     except Exception as e:
         print(f"❌ Failed to send to {name} ({phone}): {e}")
+        return False
 
 
 def send_whatsapp_reminders():
@@ -181,12 +266,12 @@ def send_whatsapp_reminders():
                 message_template = f.read()
 
             message = message_template.format(first_name=first_name, amount=amount)
-            send_message(driver, whatsapp_name, phone, message)
+            sent = send_message(driver, whatsapp_name, phone, message)
             sent_log.append({
                 "Name": name,
                 "Phone": phone,
                 "Amount": amount,
-                "Status": "Sent"
+                "Status": "Sent" if sent else "Not sent"
             })
             time.sleep(3 + random.random() * 2)
         except Exception as e:

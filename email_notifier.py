@@ -8,6 +8,18 @@ from config import EMAIL_CLUB, SMTP_PORT, SMTP_SERVER, EMAIL_USER, EMAIL_PASSWOR
 from content import content_email
 from data_handler import get_debtor_data
 
+def is_valid_email(email: str) -> bool:
+    if not email:
+        return False
+    email = email.strip()
+
+    # skip pandas NaN/None/"nan"
+    if email.lower() == "nan":
+        return False
+
+    # very simple validity check
+    return "@" in email and "." in email
+
 def send_email_notifier():
     merged_df = get_debtor_data()
 
@@ -16,8 +28,18 @@ def send_email_notifier():
 
         print("🔃", name, amount, email)
 
+        # Split multiple emails if they come comma-separated
+        email_list = [e.strip() for e in email.split(",") if is_valid_email(e)]
+
+        if not email_list:
+            print(f"⚠️ Not valird email for {name}. Skipping...")
+            continue
+
+        # Joining valid emails
+        recipient_emails = ", ".join(email_list)
+
         msg = MIMEMultipart('related')
-        msg['From'], msg['To'], msg['Subject'] = EMAIL_CLUB, email, 'Recordatorio de saldo pendiente'
+        msg['From'], msg['To'], msg['Subject'] = EMAIL_CLUB, recipient_emails, 'Recordatorio de saldo pendiente'
 
         plain_content, html_content = content_email(first_name, amount)
 
@@ -32,11 +54,15 @@ def send_email_notifier():
             logo.add_header("Content-Disposition", "inline", filename="logo.png")
             msg.attach(logo)
 
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-            server.login(EMAIL_USER, EMAIL_PASSWORD)
-            server.send_message(msg)
+        try:
+            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+                server.login(EMAIL_USER, EMAIL_PASSWORD)
+                server.send_message(msg)
     
-        print(f"✅ Email sent to debtor {first_name} - {email}: ${amount}")
+            print(f"✅ Email sent to debtor {first_name} - {recipient_emails}: ${amount}")
+        except Exception as e"
+            print(f"❌ Error sending email to {name}: {e}")
+            continue
         
             
 if '__main__' == __name__:

@@ -1,7 +1,7 @@
 import pandas as pd
 from config import DB_FILE, DEBTOR_FILE
 
-def get_debtor_data(sheet_name="Octubre"):
+def get_debtor_data(sheet_name="Noviembre"):
     df_debtors = pd.read_excel(DEBTOR_FILE, sheet_name=sheet_name, skiprows=1)
     df_db = pd.read_excel(DB_FILE, sheet_name=sheet_name)
 
