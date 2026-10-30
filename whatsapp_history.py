@@ -67,5 +67,19 @@ class SendHistory:
                 'UPDATE sends SET status = ?, updated_at = ? WHERE phone = ? AND month = ?',
                 ('Sent' if sent else 'Needs review', datetime.now().isoformat(), phone, month))
 
+    def rekey(self, normalize):
+        """Store every entry under normalize(phone), e.g. the WhatsApp number.
+
+        Entries normalize() can't read stay as they are. If the new key already
+        exists for that month, the old entry is left alone (it still blocks).
+        """
+        with self.connection:
+            for phone, month in self.connection.execute('SELECT phone, month FROM sends').fetchall():
+                new = normalize(phone)
+                if new and new != phone:
+                    self.connection.execute(
+                        'UPDATE OR IGNORE sends SET phone = ? WHERE phone = ? AND month = ?',
+                        (new, phone, month))
+
     def close(self):
         self.connection.close()

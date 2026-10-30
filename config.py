@@ -12,7 +12,7 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 BASE_PATH = os.getenv("BASE_PATH")
 DEBTOR_FILE = os.path.join(BASE_PATH, "Morosos","Morosos 2026.xlsx")
-DB_FILE = os.path.join(BASE_PATH, "Base-de-datos", "database_2026.xlsx")
+DB_FILE = os.path.join(BASE_PATH, "Base-de-datos", "socios.xlsx")  # One sheet, "Socios".
 
 USERNAME_WINDOWS = os.getenv("USERNAME_WINDOWS")
 USERNAME_LINUX = os.getenv("USERNAME_LINUX")

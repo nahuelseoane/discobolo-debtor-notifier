@@ -17,28 +17,33 @@ MONTHS_ES = [
     "Diciembre",
 ]
 
+def name_key(name):
+    return " ".join(str(name).replace(",", " ").upper().split())
+
+
 def get_debtor_data(sheet_name=None):
     if sheet_name is None:
         current_month_index = datetime.now().month - 1
         sheet_name = MONTHS_ES[current_month_index]
 
     df_debtors = pd.read_excel(DEBTOR_FILE, sheet_name=sheet_name, skiprows=1)
-    df_db = pd.read_excel(DB_FILE, sheet_name=sheet_name)
+    df_db = pd.read_excel(DB_FILE, sheet_name="Socios")
 
     df_debtors = df_debtors[df_debtors["CLIENTE"].str.upper() != "TOTAL"]
     df_debtors = df_debtors.dropna(subset=["CLIENTE"])
 
+    df_db = df_db.dropna(subset=["Nombre Completo"])
     df_db["First Name"] = df_db["Nombre Completo"]
+    # "Perez, Juan" in socios.xlsx matches "PEREZ JUAN" in the debtor list.
+    df_debtors["key"] = df_debtors["CLIENTE"].map(name_key)
+    df_db["key"] = df_db["Nombre Completo"].map(name_key)
+    # Same name twice (e.g. an ex-member): keep the active member's row.
+    df_db = (df_db.assign(active=df_db["Estado"].eq("Socio"))
+             .sort_values("active", ascending=False)
+             .drop_duplicates("key")
+             .drop(columns="active"))
 
-    df_db["Nombre Completo"] = df_db["Nombre Completo"].str.replace(",", "")
-
-    merged_df = pd.merge(
-        df_debtors,
-        df_db,
-        left_on="CLIENTE",
-        right_on="Nombre Completo",
-        how="left"
-    )
+    merged_df = pd.merge(df_debtors, df_db, on="key", how="left").drop(columns="key")
     merged_df["WhatsApp Name"] = merged_df["First Name"].apply(
         lambda n: " ".join([p.strip().title() for p in n.split(",")[::-1]]) if isinstance(n, str) and "," in n else str(n).title()
     )

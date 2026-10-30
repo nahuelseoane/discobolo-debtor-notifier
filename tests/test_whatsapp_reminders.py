@@ -66,6 +66,20 @@ class SendTest(unittest.TestCase):
         self.assertIn("Hola Ana", session.sent[0][1])
         self.assertIn("12000", session.sent[0][1])
 
+    def test_format_change_between_runs_does_not_resend(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "history.sqlite3"
+            session = FakeSession()
+            history = SendHistory(path)
+            # An earlier run that stored the number as written in the spreadsheet.
+            history.claim("1112345678", "Ana Pérez", reminders.datetime.now().strftime("%Y-%m"))
+            history.finish("1112345678", reminders.datetime.now().strftime("%Y-%m"), True)
+            history.rekey(reminders.whatsapp_number)
+            self.run_once([row("Ana Pérez", "+5491112345678")], history, session)
+            self.run_once([row("Ana Pérez", "1512345678")], history, session)
+            history.close()
+        self.assertEqual(session.sent, [])
+
     def test_bad_numbers_are_logged_not_guessed(self):
         rows = [row("Sin Tel", ""), row("Raro Num", "54911123"), row("Falla Envio", "1199999999")]
         with tempfile.TemporaryDirectory() as folder:

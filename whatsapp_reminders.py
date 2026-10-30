@@ -45,6 +45,7 @@ def send_whatsapp_reminders(legacy_month=None, client=None):
     history = SendHistory()
     try:
         history.import_legacy(month=legacy_month)
+        history.rekey(whatsapp_number)
         _send_whatsapp_reminders(history, client)
     finally:
         history.close()
@@ -63,14 +64,16 @@ def _send_whatsapp_reminders(history, client=None):
     def work(wa):
         for _, row in debtors.iterrows():
             name, amount = row["CLIENTE"], row["SALDO"]
-            phone = normalize_phone(row.get("Celular", ""))  # History key, as before.
+            phone = normalize_phone(row.get("Celular", ""))
             number = whatsapp_number(phone)
             if not number:
                 status = "Skipped - missing phone" if not phone else "Skipped - invalid phone"
                 print(f"⚠️ {name}: {status}")
                 log.append({"Name": name, "Phone": phone, "Amount": amount, "Status": status})
                 continue
-            if not history.claim(phone, name, month):
+            # History key: the WhatsApp number, so a format change in the
+            # spreadsheet (with or without +549) can't cause a second send.
+            if not history.claim(number, name, month):
                 print(f"⏭️ Skipping {name}: already sent or awaiting review for {month}")
                 continue
             message = template.format(first_name=row["First Name"], amount=amount)
@@ -81,7 +84,7 @@ def _send_whatsapp_reminders(history, client=None):
             except Exception as error:
                 sent = False
                 print(f"❌ Failed to send to {name} (+{number}): {error}")
-            history.finish(phone, month, sent)
+            history.finish(number, month, sent)
             log.append({"Name": name, "Phone": phone, "Amount": amount,
                         "Status": "Sent" if sent else "Not sent"})
             time.sleep(random.uniform(*PAUSE_SECONDS))
