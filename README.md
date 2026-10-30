@@ -131,3 +131,31 @@ python main.py generate-report
 ## 🪪 License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+### Monthly WhatsApp duplicate protection
+
+`python whatsapp_notifier.py` keeps persistent history in
+`whatsapp_history.sqlite3`, beside the script. A normalized phone number can be
+claimed only once per local calendar month (including the year), even across
+restarts or concurrent runs. Changing the reminder text or balance does not
+allow another send that month. Keep this database when updating the script.
+`whatsapp_sent_log.xlsx`, beside the script, keeps a separate tab for each
+month (`YYYY-MM`). Runs append results to that month's tab, preserving earlier
+runs and months. Existing undated tabs are preserved. The Excel file is a
+report; the SQLite database remains the duplicate guard.
+
+The old Excel report has no dates. On the first run, explicitly assign its
+successful sends to their actual month, for example:
+
+```bash
+python whatsapp_notifier.py --legacy-month 2026-09
+```
+
+Use `--legacy-month ignore` only if those old sends should not suppress any
+current reminders. Import happens once and only includes `Sent` entries.
+
+A claim is saved before interacting with WhatsApp. Interrupted sends stay
+`Pending`; unsuccessful attempts become `Needs review`. Both block automatic
+retries that month because browser errors can leave delivery uncertain. Check
+the chat before manually removing a corresponding database row to allow a retry.
+`Sent` means the browser submitted the message, not confirmed delivery.

@@ -1,11 +1,14 @@
 import random
+from datetime import datetime
+from whatsapp_history import LEGACY_PATH, SendHistory, normalize_phone
+from openpyxl import Workbook, load_workbook
 import time
 import pyperclip
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from data_handler import get_debtor_data
@@ -46,20 +49,59 @@ def get_driver_chrome_windows():
 
 def clear_and_focus_search_box(driver):
     """Focuses the WhatsApp search box and clears any existing text."""
-    search_box = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="3"]'))
-    )
-    search_box.click()
-    search_box.send_keys(Keys.CONTROL + "a")
-    search_box.send_keys(Keys.DELETE)
-    time.sleep(0.5)
-    return search_box
+    wait = WebDriverWait(driver, 25)
+
+    search_xpaths = [
+        "//input[@role='textbox' and @aria-label='Buscar un chat o iniciar uno nuevo']",
+        "//input[@placeholder='Buscar un chat o iniciar uno nuevo']",
+        "//input[@role='textbox' and contains(@aria-label, 'Buscar')]",
+        "//input[@type='text' and contains(@placeholder, 'Buscar')]",
+        "//div[@id='side']//div[@contenteditable='true' and @role='textbox']",
+    ]
+
+    last_error = None
+
+    for xpath in search_xpaths:
+        try:
+            search_box = wait.until(
+                EC.element_to_be_clickable((By.XPATH, xpath))
+            )
+
+            search_box.click()
+            time.sleep(0.3)
+
+            search_box.send_keys(Keys.CONTROL, "a")
+            search_box.send_keys(Keys.BACKSPACE)
+            time.sleep(0.5)
+
+            return search_box
+
+        except Exception as e:
+            last_error = e
+
+    raise TimeoutException(f"Could not find WhatsApp search box. Last error: {last_error}")
 
 
-def normalize_phone(p):
-    if not p:
-        return ""
-    return "".join(ch for ch in str(p) if ch.isdigit())
+def get_message_box(driver):
+    """Returns the WhatsApp message input box."""
+    wait = WebDriverWait(driver, 20)
+
+    message_xpaths = [
+        "//footer//div[@contenteditable='true' and @role='textbox']",
+        "//footer//div[@contenteditable='true']",
+    ]
+
+    last_error = None
+
+    for xpath in message_xpaths:
+        try:
+            return wait.until(
+                EC.element_to_be_clickable((By.XPATH, xpath))
+            )
+        except Exception as e:
+            last_error = e
+
+    raise TimeoutException(f"Could not find WhatsApp message box. Last error: {last_error}")
 
 
 def verify_chat_opened(driver, expected_name, phone, searched_by_phone=False):
@@ -221,35 +263,68 @@ def send_message(driver, name, phone, message):
             print("   (Not sending message as a safety measure)")
             return False    
 
-        msg_box = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]'))
-            )
+        msg_box = get_message_box(driver)
 
         pyperclip.copy(message)
         msg_box.send_keys(Keys.CONTROL, 'v')
         msg_box.send_keys(Keys.ENTER)
+
         print(f"✅ WhatsApp sent to {name} ({phone})")
         return True
     
     except Exception as e:
-        print(f"❌ Failed to send to {name} ({phone}): {e}")
+        print(f"❌ Failed to send to {name} ({phone}): {type(e).__name__} - {repr(e)}")
         return False
 
 
-def send_whatsapp_reminders():
+def save_monthly_log(rows, month, path=LEGACY_PATH):
+    """Append run results without overwriting earlier runs or months."""
+    if not rows:
+        return
+    if path.exists():
+        workbook = load_workbook(path)
+    else:
+        workbook = Workbook()
+        workbook.remove(workbook.active)
+    try:
+        columns = ['Name', 'Phone', 'Amount', 'Status']
+        if month in workbook.sheetnames:
+            sheet = workbook[month]
+        else:
+            sheet = workbook.create_sheet(month)
+            sheet.append(columns)
+        for row in rows:
+            sheet.append([row[column] for column in columns])
+        workbook.save(path)
+    finally:
+        workbook.close()
+
+
+def send_whatsapp_reminders(legacy_month=None):
+    history = SendHistory()
+    try:
+        history.import_legacy(month=legacy_month)
+        _send_whatsapp_reminders(history)
+    finally:
+        history.close()
+
+
+def _send_whatsapp_reminders(history):
     merged_df = get_debtor_data()
     driver = get_driver()
     driver.get("https://web.whatsapp.com")
-
+    time.sleep(10)
     try:
         driver.find_element("css selector", "canvas[aria-label='Scan me!']")
         input("📲 Scan the QR code and press Enter to continue...")
+        time.sleep(60)
     except NoSuchElementException:
         # already logged in
         print("✅ WhatsApp already logged in, skipping QR step.")
         time.sleep(20)
     
     sent_log = []
+    month = datetime.now().strftime("%Y-%m")
     for _, row in merged_df.iterrows():
         try:
             name = row["CLIENTE"]
@@ -257,16 +332,27 @@ def send_whatsapp_reminders():
             amount = row["SALDO"]
             raw_phone = row.get("Celular", "")
             whatsapp_name = row["WhatsApp Name"]
-            if pd.isna(raw_phone):
-                phone = ""
-            else:
-                phone = str(raw_phone.strip().replace(" ", ""))
+            phone = normalize_phone(raw_phone)
+
+            if not phone:
+                print(f"⚠️ Skipping {name}: missing phone number")
+                sent_log.append({
+                    "Name": name,
+                    "Phone": "",
+                    "Amount": amount,
+                    "Status": "Skipped - missing phone"
+                })
+                continue
 
             with open("content_whatsapp.txt", "r", encoding="utf-8") as f:
                 message_template = f.read()
 
             message = message_template.format(first_name=first_name, amount=amount)
+            if not history.claim(phone, name, month):
+                print(f"⏭️ Skipping {name}: already sent or awaiting review for {month}")
+                continue
             sent = send_message(driver, whatsapp_name, phone, message)
+            history.finish(phone, month, sent)
             sent_log.append({
                 "Name": name,
                 "Phone": phone,
@@ -278,12 +364,23 @@ def send_whatsapp_reminders():
             print(f"❌ Failed running script -> {name} ({phone}): {e}")
 
     if sent_log:
-        pd.DataFrame(sent_log).to_excel("whatsapp_sent_log.xlsx", index=False)
-        print("💾 Log saved as whatsapp_sent_log.xlsx")
+        save_monthly_log(sent_log, month)
+        print(f"💾 Log saved to {LEGACY_PATH}, tab {month}")
     driver.quit()
     print("👋 WhatsApp automation finished, browser closed.")
     
 
 if '__main__' == __name__:
-    send_whatsapp_reminders()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--legacy-month", help="Month for undated Excel sends: YYYY-MM, or ignore")
+    args = parser.parse_args()
+    if args.legacy_month and args.legacy_month != "ignore":
+        try:
+            parsed = datetime.strptime(args.legacy_month, "%Y-%m")
+            if parsed.strftime("%Y-%m") != args.legacy_month:
+                raise ValueError()
+        except ValueError:
+            parser.error("--legacy-month must be YYYY-MM or ignore")
+    send_whatsapp_reminders(legacy_month=args.legacy_month)
     

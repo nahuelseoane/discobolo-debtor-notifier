@@ -11,8 +11,8 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 BASE_PATH = os.getenv("BASE_PATH")
-DEBTOR_FILE = os.path.join(BASE_PATH, "Morosos","Morosos 2025.xlsx")
-DB_FILE = os.path.join(BASE_PATH, "socios_database.xlsx")
+DEBTOR_FILE = os.path.join(BASE_PATH, "Morosos","Morosos 2026.xlsx")
+DB_FILE = os.path.join(BASE_PATH, "Base-de-datos", "database_2026.xlsx")
 
 USERNAME_WINDOWS = os.getenv("USERNAME_WINDOWS")
 USERNAME_LINUX = os.getenv("USERNAME_LINUX")

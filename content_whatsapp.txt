@@ -1,2 +1,2 @@
-Hola {first_name} 💚 te recordamos que tenés un saldo pendiente de ${amount}.
-Cualquier duda, hablá con Claudio o Nahuel en recepción. ¡Gracias! 🎾 Discóbolo
+Hola {first_name} 💚 ¿cómo estás? Te avisamos que ya estamos a 30 del mes y quedó un saldo pendiente de ${amount}.
+Cuando puedas lo vemos 😊 ¡Gracias! 🎾 Discóbolo

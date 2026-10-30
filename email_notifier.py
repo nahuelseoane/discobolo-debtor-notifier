@@ -1,5 +1,7 @@
 import smtplib
 
+import pandas as pd
+
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -9,30 +11,49 @@ from content import content_email
 from data_handler import get_debtor_data
 
 def is_valid_email(email: str) -> bool:
+    if not isinstance(email, str):
+        return False
+
+    email = email.strip()
     if not email:
         return False
-    email = email.strip()
 
-    # skip pandas NaN/None/"nan"
-    if email.lower() == "nan":
+    if " " in email:
         return False
 
-    # very simple validity check
-    return "@" in email and "." in email
+    if email.count("@") != 1:
+        return False
+
+    local, domain = email.split("@")
+    if not local or not domain:
+        return False
+
+    # Require at least one dot in the domain part (e.g. example.com)
+    if "." not in domain or domain.startswith(".") or domain.endswith("."):
+        return False
+
+    return True
+
+def normalize_email_cell(value) -> str:
+    # Handles NaN / None cleanly
+    if pd.isna(value):
+        return ""
+    return str(value).strip().replace(";", ",")
 
 def send_email_notifier():
     merged_df = get_debtor_data()
 
     for _, row in merged_df.iterrows():
-        name, amount, email, first_name= row["CLIENTE"], row["SALDO"], str(row["Emails"]).strip().replace(";",","), row["First Name"]
-
+        name, amount, first_name= row["CLIENTE"], row["SALDO"], row["First Name"]
+        email = normalize_email_cell(row["Emails"])
+        
         print("🔃", name, amount, email)
 
         # Split multiple emails if they come comma-separated
         email_list = [e.strip() for e in email.split(",") if is_valid_email(e)]
 
         if not email_list:
-            print(f"⚠️ Not valird email for {name}. Skipping...")
+            print(f"⚠️ Not valid email for {name}. Skipping...")
             continue
 
         # Joining valid emails
@@ -60,7 +81,7 @@ def send_email_notifier():
                 server.send_message(msg)
     
             print(f"✅ Email sent to debtor {first_name} - {recipient_emails}: ${amount}")
-        except Exception as e"
+        except Exception as e:
             print(f"❌ Error sending email to {name}: {e}")
             continue
         
