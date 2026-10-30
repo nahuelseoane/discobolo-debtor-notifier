@@ -7,6 +7,7 @@ The duplicate guard (whatsapp_history.sqlite3) and the Excel log stay the same.
 Setup, once: python -m pip install -e "../discobolo-messaging[whatsapp]"
 """
 
+import logging
 import random
 import time
 from datetime import datetime
@@ -24,10 +25,17 @@ def whatsapp_number(digits: str) -> str | None:
     """The number WhatsApp needs (549 + area + number), or None if unsure.
 
     '5491112345678' stays; '1112345678' (Buenos Aires mobile written without
-    the country code) becomes '5491112345678'. Anything else is not guessed.
+    the country code) becomes '5491112345678'. The old '15' mobile prefix
+    written instead of the area code ('5491512345678', '1512345678') becomes
+    Buenos Aires '5491112345678': WhatsApp can't send to the '15' form, and
+    lookups showed both forms are the same account. Anything else is not guessed.
     """
+    if len(digits) == 13 and digits.startswith("54915"):
+        return "54911" + digits[5:]
     if len(digits) == 13 and digits.startswith("549"):
         return digits
+    if len(digits) == 10 and digits.startswith("15"):
+        return "54911" + digits[2:]
     if len(digits) == 10 and digits.startswith("11"):
         return "549" + digits
     return None
@@ -89,6 +97,10 @@ def _send_whatsapp_reminders(history, client=None):
 
 if __name__ == "__main__":
     import argparse
+
+    # whatsmeow floods the terminal with harmless warnings; keep errors only.
+    for logger in ("whatsmeow", "Whatsmeow"):
+        logging.getLogger(logger).setLevel(logging.ERROR)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--legacy-month", help="Month for undated Excel sends: YYYY-MM, or ignore")

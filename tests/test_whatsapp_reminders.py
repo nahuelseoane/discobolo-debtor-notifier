@@ -36,6 +36,8 @@ class WhatsAppNumberTest(unittest.TestCase):
     def test_numbers(self):
         self.assertEqual(reminders.whatsapp_number("5491112345678"), "5491112345678")
         self.assertEqual(reminders.whatsapp_number("1112345678"), "5491112345678")
+        self.assertEqual(reminders.whatsapp_number("5491554174538"), "5491154174538")
+        self.assertEqual(reminders.whatsapp_number("1554174538"), "5491154174538")
         for unsure in ("", "54911123456", "549111234567890", "2214567890"):
             self.assertIsNone(reminders.whatsapp_number(unsure))
 
