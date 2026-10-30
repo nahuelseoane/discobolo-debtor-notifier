@@ -20,7 +20,9 @@ def normalize_phone(value):
 
 class SendHistory:
     def __init__(self, path=HISTORY_PATH):
-        self.connection = sqlite3.connect(path)
+        # The WhatsApp client runs the send loop in its own thread; only one
+        # thread uses the connection at a time, so sharing it is safe.
+        self.connection = sqlite3.connect(path, check_same_thread=False)
         with self.connection:
             self.connection.execute('''CREATE TABLE IF NOT EXISTS sends (
                 phone TEXT NOT NULL, month TEXT NOT NULL, name TEXT,

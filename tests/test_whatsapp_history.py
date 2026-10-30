@@ -22,6 +22,22 @@ class HistoryTests(unittest.TestCase):
             self.assertFalse(second.claim('549123', 'Person', '2026-10'))
             second.close()
 
+    def test_usable_from_another_thread(self):
+        # The WhatsApp client runs the send loop in a worker thread.
+        import threading
+        with tempfile.TemporaryDirectory() as directory:
+            history = SendHistory(Path(directory) / 'history.sqlite3')
+            results = []
+            def work():
+                results.append(history.claim('549123', 'Person', '2026-10'))
+                history.finish('549123', '2026-10', True)
+            thread = threading.Thread(target=work)
+            thread.start()
+            thread.join()
+            self.assertEqual(results, [True])
+            self.assertFalse(history.claim('549123', 'Person', '2026-10'))
+            history.close()
+
     def test_two_connections_cannot_claim_same_recipient(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'history.sqlite3'
