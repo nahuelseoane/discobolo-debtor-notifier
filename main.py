@@ -1,7 +1,7 @@
 # src/main.py
 import typer
 from email_notifier import send_email_notifier as send_email_reminders
-from whatsapp_notifier import send_whatsapp_reminders
+from whatsapp_reminders import send_whatsapp_reminders  # Linked device, no browser.
 
 app = typer.Typer()
 
